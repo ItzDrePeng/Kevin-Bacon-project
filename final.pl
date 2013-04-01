@@ -10,14 +10,13 @@ while(@ARGV) {
     or die "cannot open $filename";
   my $current_actor = "";
   while(<$FH>) {
-    my @movies = ();
     if ($_ =~ /^([^\t]+)\t.*/) {  # capture the actor's name (don't come here unless the line starts with the actor's name)
       $current_actor = $1; 
     }
     if ($_ =~ /^[^\t]*\t* ( .*?[)] )/x) {
         $current_movie = $1;
     }
-    if ($current_movie =~ /^[^"].*$/ && $_ =~ /^( ?!\(TV\)) (?!\(V\)) (?!\(VG\)) .)*$/x)  {	#regex line 1: consume leading tabs and capture movie & date				        
+    if ($current_movie =~ /^[^"].*$/ && $_ =~ /^( ?!\(TV\)) (?!\(V\)) (?!\(VG\)) .*$/x)  {	#regex line 1: consume leading tabs and capture movie & date				        
         #regex line 2: assert there are no instances of "(TV)", "(V)", or "(VG)"
 	my @array;        
 	if (exists $moviesPresent{$current_actor}) {
@@ -29,16 +28,14 @@ while(@ARGV) {
 	push @array, $current_movie;
 	$moviesPresent{$current_actor} = \@array;	
     }
-  }
-  $lastRef = \@movies;
-  $moviesPresent{$current_actor} = $lastRef; 
+  } 
 }
 
 buildGraph;
 
 while(<>) {
   print "Actor/Actress? ";
-  $potentials = printNames(chomp($_));
+  $potentials = findMatches(chomp($_));
   if (@{$potentials} == 1) {
     $path = search(${$potentials->[0]});
     if ($path) {
@@ -74,8 +71,8 @@ sub buildGraph {
     my @connected = ();
     my @others = splice(@actors, $offset);
     foreach $secondAct (@others) {
-      if (commonMovie($firstAct, $secondAct) {
-        push @connect, $secondAct;
+      if (commonMovie($firstAct, $secondAct)) {
+        push @connected, $secondAct;
       }   	
     }
     $connectedActors{$firstAct} = \@connected;
@@ -87,9 +84,9 @@ sub buildGraph {
 sub commonMovie {
   my $firstAct = shift;
   my $secondAct = shift;
-  my %hash = map {$_ -> 1} @{$moviesPresent{$secondAct}}; 
+  my %hash = map {$_ => 1} @{$moviesPresent{$secondAct}}; 
   foreach $movie (@{$moviesPresent{$firstAct}}) {
-    if exists $hash{$movie} {
+    if (exists $hash{$movie}) {
       return $movie;
     }
   }
@@ -98,7 +95,22 @@ sub commonMovie {
 
 # print all relevant actors, based on the "keywords" typed in by the user
 # if a specific actor is specified, call search
-sub printNames {
+sub findMatches {
+  my @results = ();
+  foreach $actor (keys %connectedActors) { # don't forget to omit the ,
+    $actor =~ s/,//g;
+    my $flag = 1;
+    foreach $keyword (@_) {
+      if ($actor !~ /\b $keyword \b/x) {
+        $flag = 0;
+        last;
+      }
+    }
+    if ($flag) {
+      push @results, $actor;
+    }
+  }
+  return \@results;
 }
 
 # borrows from Dijkstra's algorithm to find all of the shortest paths from KB
@@ -109,7 +121,7 @@ sub findPaths {
     my $currentAct = shift @actQueue;
     my $currentPath = shift @pathQueue;
     foreach $neighbor (@{$connectActors{$currentAct}}) {
-      if (!($neighbor =~ /#$/) { # have we explored this actor yet?
+      if ($neighbor !~ /#$/) { # have we explored this actor yet?
         $copyPath = $currentPath;
         push @{$copyPath}, $neighbor;
         push @pathActors, $copyPath;
@@ -125,17 +137,18 @@ sub markVisited {
   my $target = shift;
   my $i = 0;
   foreach $key (%connectedActors) {
-    my %hash = map ($_ => $i++) @{$connectedActors{$key}}; # ehh, trying to make it so that each value is its position in the list...
-    if exists $hash{$target} {
-      splice(@{$connectedActors{$key}, $hash{$target}, 1, $target + "#"); 
+    my %hash = map {$_ => $i++} @{$connectedActors{$key}}; # ehh, trying to make it so that each value is its position in the list...
+    if (exists $hash{$target}) {
+      splice(@{$connectedActors{$key}}, $hash{$target}, 1, $target + "#"); 
     }
   }
 }
 
 sub search {
   foreach $path (@pathActors) { 
-    if (${$path->[-1]} eq shift)
+    if (${$path->[-1]} eq shift) {
       return $path;
+    }
   }
   return "";
 }
@@ -188,6 +201,6 @@ sub search {
 
 
 
-}
+
 
 
