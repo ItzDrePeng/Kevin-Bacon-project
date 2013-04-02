@@ -1,7 +1,10 @@
 #!/usr/bin/perl
 
 our %moviesPresent = (); #key: actor.  Value: movies that the actor appears in
-our %connectedActors = (); #search this in the search algorithm
+#our %actorsPresent = (); #inverse hash of ^^^
+
+#our %connectedActors = (); #search this in the search algorithm
+our @visitedActors = ();
 our @pathActors = (); # will be an array of arrays; keep track of all the paths found from KB
 
 while(@ARGV) {
@@ -16,7 +19,7 @@ while(@ARGV) {
     if ($_ =~ /^[^\t]*\t* ( .*?[)] )/x) {
         $current_movie = $1;
     }
-    if ($current_movie =~ /^[^"].*$/ && $_ =~ /^( ?!\(TV\)) (?!\(V\)) (?!\(VG\)) .*$/x)  {	#regex line 1: consume leading tabs and capture movie & date				        
+    if ($current_movie =~ /^[^"].*$/ && $_ =~ /^(. (?!\(TV\)) (?!\(V\)) (?!\(VG\)) )*$/x)  {	#regex line 1: consume leading tabs and capture movie & date				        
         #regex line 2: assert there are no instances of "(TV)", "(V)", or "(VG)"
 	my @array;        
 	if (exists $moviesPresent{$current_actor}) {
@@ -26,7 +29,7 @@ while(@ARGV) {
 	  @array = ();
 	}
 	push @array, $current_movie;
-	$moviesPresent{$current_actor} = \@array;	
+	$moviesPresent{$current_actor} = \@array; 
     }
   } 
 }
@@ -35,16 +38,18 @@ foreach $actor (keys %moviesPresent) {
   print "Actor: $actor\n";
 }
 =cut
-buildGraph();
+findPaths();
 
+=pod
 foreach $actor (keys %connectedActors) {
   print "Actor: $actor\n";
 }
+=cut
 
 print "Actor/Actress? ";
 while(<>) {
   $potentials = findMatches(chomp($_));
-  print "@{$potentials} results found\n";
+#  print "@{$potentials} results found\n";
   if (@{$potentials} == 1) {
     $path = search(${$potentials->[0]});
     if ($path) {
@@ -70,28 +75,6 @@ while(<>) {
   print "Actor/Actress? ";
 }
 
-# if two actors have at least one movie in common, put an edge between them (by adding to %connectedActors), then search another distinct pair (next) to see if they share a common movie
-# builds %connectedActors
-# helper: commonMovie
-sub buildGraph {
-  my @actors = keys %moviesPresent;
- # $var = $#actors + 1;
-  print "Building a graph for $var actors\n";
-  while (@actors > 0) {
-   # print "$var\n";
-    my $firstAct = shift @actors;
-    my @connected = ();
-    foreach $secondAct (@actors) {
-      if (commonMovie($firstAct, $secondAct)) {
-       # print "Common movie found\n";
-        push @connected, $secondAct;
-      }   	
-    }
-    $connectedActors{$firstAct} = \@connected;
-   # $var--;
-  } 
-}
-
 # get a common movie between the two given actors.
 sub commonMovie {
 #  print "Finding common movie\n";
@@ -109,17 +92,20 @@ sub commonMovie {
 # print all relevant actors, based on the "keywords" typed in by the user
 # if a specific actor is specified, call search
 sub findMatches {
-  print "Searching for relevant actors\n";
   my @results = ();
-  foreach $actor (keys %connectedActors) { # don't forget to omit the ,
+  foreach $actor (keys %moviesPresent) { # don't forget to omit the ,
+    my $flag = 1;
     $modActor = $actor;
     $modActor =~ s/,//g;
     foreach $keyword (@_) {
-      if ($modActor !~ /\b $keyword \b/xi) {
+      if ($modActor !~ /\b $keyword \b/xi || $actor !~ /\b $keyword \b/xi) {
+        $flag = 0;
         last; # should not get to the push statement below if keywords don't match
       }
     }
-    push @results, $actor; # we still want the comma in there
+    if ($flag) {
+      push @results, $actor; # we still want the comma in there 
+    }
   }
   return \@results;
 }
@@ -131,32 +117,31 @@ sub findPaths {
   while (@actQueue && @pathQueue) {
     my $currentAct = shift @actQueue;
     my $currentPath = shift @pathQueue;
-    foreach $neighbor (@{$connectActors{$currentAct}}) {
-      if ($neighbor !~ /#$/) { # have we explored this actor yet?
+    my $neighbors = findUnvisitedNeighbors($currentAct);
+    foreach $neighbor (@{$neighbors}) {
         $copyPath = $currentPath;
         push @{$copyPath}, $neighbor;
         push @pathActors, $copyPath;
         push @actQueue, $neighbor;
         push @pathQueue, $copyPath;
-        markVisited($neighbor); # must mark every instance of $neighbor within the values of %connectedActors
-      }
+        push @visitedActors, $neighbor;
     }
   }
 }
  
-sub markVisited {
-  my $target = shift;
-  my $i = 0;
-  foreach $key (%connectedActors) {
-    my %hash = map {$_ => $i++} @{$connectedActors{$key}}; # ehh, trying to make it so that each value is its position in the list
-    foreach $checkKey ($hash) {
-      print "$checkKey : $hash{$checkKey}\n"
-    }
-    if (exists $hash{$target}) {
-      splice(@{$connectedActors{$key}}, $hash{$target}, 1, $target + "#"); # change this
+sub findUnvisitedNeighbors {
+  $main = shift;
+  @results = ();
+  %visited = map {$_ => 1} @visitedActors;
+  @others = grep {$_ ne $main && !(exists $visited{$_})} keys %moviesPresent;
+  foreach $other (@others) {
+    if (commonMovie($main, $other)) {
+      push @results, $other;
     }
   }
+  return \@results;  
 }
+
 
 sub search {
   foreach $path (@pathActors) { 
