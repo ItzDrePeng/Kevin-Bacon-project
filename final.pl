@@ -1,10 +1,7 @@
 #!/usr/bin/perl
 
 our %moviesPresent = (); #key: actor.  Value: movies that the actor appears in
-#our %actorsPresent = (); #inverse hash of ^^^
-
-#our %connectedActors = (); #search this in the search algorithm
-our @visitedActors = ();
+#our %visitedActors = ("Bacon, Kevin" => 1);
 our @pathActors = (); # will be an array of arrays; keep track of all the paths found from KB
 
 while(@ARGV) {
@@ -33,38 +30,34 @@ while(@ARGV) {
     }
   } 
 }
-=pod
-foreach $actor (keys %moviesPresent) {
-  print "Actor: $actor\n";
-}
-=cut
+print "b\n";
 findPaths();
-
-=pod
-foreach $actor (keys %connectedActors) {
-  print "Actor: $actor\n";
-}
-=cut
+$blah = $#pathActors + 1;
+print "$blah actors are connected to KB\n";
 
 print "Actor/Actress? ";
 while(<>) {
-  $potentials = findMatches(chomp($_));
-#  print "@{$potentials} results found\n";
-  if (@{$potentials} == 1) {
-    $path = search(${$potentials->[0]});
+  chomp;
+  @keyWords = /([^\s]+)/ig; # whitespace is the delimiter
+  $potentials = findMatches(\@keyWords);
+  @potentList = @{$potentials};
+  $var = $#potentList + 1;
+  print "$var results found\n";
+  if (@potentList == 1) {
+    $path = search($potentList[0]);
     if ($path) {
       $actOne = pop @{$path};
       print "$actOne\n";
       while (@{$path} > 0) {
         $actTwo = pop @{$path};
         $commonM = commonMovie($actOne, $actTwo);
-        print "\t $commonM\n";
+        print "\t$commonM\n";
         print "$actTwo\n";
         $actOne = $actTwo;
       } 
     }
     else {
-      print "Whoops, looks like there's no path from ${$potentials->[0]} to Kevin Bacon :(\n";
+      print "Whoops, looks like there's no path from $potentList[0] to Kevin Bacon :(\n";
     }
   }
   else {
@@ -80,9 +73,11 @@ sub commonMovie {
 #  print "Finding common movie\n";
   my $firstAct = shift;
   my $secondAct = shift;
-  my %hash = map {$_ => 1} @{$moviesPresent{$secondAct}}; 
+#  my $hash = shift;
+#  my %tempTable = %{$hash};
+  my %hash2 = map {$_ => 1} @{$moviesPresent{$secondAct}}; 
   foreach $movie (@{$moviesPresent{$firstAct}}) {
-    if (exists $hash{$movie}) {
+    if (exists $hash2{$movie}) {
       return $movie;
     }
   }
@@ -92,15 +87,17 @@ sub commonMovie {
 # print all relevant actors, based on the "keywords" typed in by the user
 # if a specific actor is specified, call search
 sub findMatches {
+  my $ref = shift;
+  my @keyWords = @{$ref};
   my @results = ();
   foreach $actor (keys %moviesPresent) { # don't forget to omit the ,
     my $flag = 1;
     $modActor = $actor;
     $modActor =~ s/,//g;
-    foreach $keyword (@_) {
+    foreach $keyword (@keyWords) {
       if ($modActor !~ /\b $keyword \b/xi || $actor !~ /\b $keyword \b/xi) {
         $flag = 0;
-        last; # should not get to the push statement below if keywords don't match
+        last;
       }
     }
     if ($flag) {
@@ -112,9 +109,12 @@ sub findMatches {
 
 # borrows from Dijkstra's algorithm to find all of the shortest paths from KB
 sub findPaths {
-  my @actQueue = ["Bacon, Kevin"];
-  my @pathQueue = [["Bacon, Kevin"]]; # these two lists should be synced together, that way we get the correct sub-path for each actor
-  while (@actQueue && @pathQueue) {
+#  my %mpCopy = %moviesPresent;
+  my @actQueue = ("Bacon, Kevin");
+ # print "$actQueue[0]\n";
+  my @pathQueue = (("Bacon, Kevin")); # these two lists should be synced together, that way we get the correct sub-path for each actor
+  while (@actQueue) {
+#    print "a\n";
     my $currentAct = shift @actQueue;
     my $currentPath = shift @pathQueue;
     my $neighbors = findUnvisitedNeighbors($currentAct);
@@ -124,82 +124,28 @@ sub findPaths {
         push @pathActors, $copyPath;
         push @actQueue, $neighbor;
         push @pathQueue, $copyPath;
-        push @visitedActors, $neighbor;
+        $visitedActors{$neighbor} = 1;
     }
+ #   delete($mpCopy{$currentAct});
   }
 }
  
 sub findUnvisitedNeighbors {
   $main = shift;
-  @results = ();
-  %visited = map {$_ => 1} @visitedActors;
-  @others = grep {$_ ne $main && !(exists $visited{$_})} keys %moviesPresent;
-  foreach $other (@others) {
-    if (commonMovie($main, $other)) {
-      push @results, $other;
-    }
-  }
+ # $hash = shift;
+  @results = grep {!(exists $visitedActors{$_}) && commonMovie($main, $_)} keys %moviesPresent;
+ # print "$#others neighbors of $main\n";
   return \@results;  
 }
 
 
 sub search {
-  foreach $path (@pathActors) { 
-    if (${$path->[-1]} eq shift) {
-      return $path;
+  $target = shift;
+  foreach $pathRef (@pathActors) {
+    @path = @{$pathRef};  
+    if ($path[-1] eq $target) {
+      return $pathRef;
     }
   }
   return "";
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
