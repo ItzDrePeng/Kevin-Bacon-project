@@ -30,19 +30,28 @@ while(@ARGV) {
     }
   } 
 }
+=pod
+foreach $actor (keys %moviesPresent) {
+  print "Actor: $actor\n";
+}
+=cut
+buildGraph();
 
-buildGraph;
+foreach $actor (keys %connectedActors) {
+  print "Actor: $actor\n";
+}
 
+print "Actor/Actress? ";
 while(<>) {
-  print "Actor/Actress? ";
   $potentials = findMatches(chomp($_));
+  print "@{$potentials} results found\n";
   if (@{$potentials} == 1) {
     $path = search(${$potentials->[0]});
     if ($path) {
-      $actOne = shift @{$path};
+      $actOne = pop @{$path};
       print "$actOne\n";
       while (@{$path} > 0) {
-        $actTwo = shift @{$path};
+        $actTwo = pop @{$path};
         $commonM = commonMovie($actOne, $actTwo);
         print "\t $commonM\n";
         print "$actTwo\n";
@@ -58,6 +67,7 @@ while(<>) {
       print "$actor\n";
     }
   }
+  print "Actor/Actress? ";
 }
 
 # if two actors have at least one movie in common, put an edge between them (by adding to %connectedActors), then search another distinct pair (next) to see if they share a common movie
@@ -65,23 +75,26 @@ while(<>) {
 # helper: commonMovie
 sub buildGraph {
   my @actors = keys %moviesPresent;
-  my $offset = 1;
-  for ($i = 0; $i < $#actors; $i++) {
-    my $firstAct = $actors[$i];
+ # $var = $#actors + 1;
+  print "Building a graph for $var actors\n";
+  while (@actors > 0) {
+   # print "$var\n";
+    my $firstAct = shift @actors;
     my @connected = ();
-    my @others = splice(@actors, $offset);
-    foreach $secondAct (@others) {
+    foreach $secondAct (@actors) {
       if (commonMovie($firstAct, $secondAct)) {
+       # print "Common movie found\n";
         push @connected, $secondAct;
       }   	
     }
     $connectedActors{$firstAct} = \@connected;
-    $offset++;
+   # $var--;
   } 
 }
 
 # get a common movie between the two given actors.
 sub commonMovie {
+#  print "Finding common movie\n";
   my $firstAct = shift;
   my $secondAct = shift;
   my %hash = map {$_ => 1} @{$moviesPresent{$secondAct}}; 
@@ -96,19 +109,17 @@ sub commonMovie {
 # print all relevant actors, based on the "keywords" typed in by the user
 # if a specific actor is specified, call search
 sub findMatches {
+  print "Searching for relevant actors\n";
   my @results = ();
   foreach $actor (keys %connectedActors) { # don't forget to omit the ,
-    $actor =~ s/,//g;
-    my $flag = 1;
+    $modActor = $actor;
+    $modActor =~ s/,//g;
     foreach $keyword (@_) {
-      if ($actor !~ /\b $keyword \b/x) {
-        $flag = 0;
-        last;
+      if ($modActor !~ /\b $keyword \b/xi) {
+        last; # should not get to the push statement below if keywords don't match
       }
     }
-    if ($flag) {
-      push @results, $actor;
-    }
+    push @results, $actor; # we still want the comma in there
   }
   return \@results;
 }
@@ -137,9 +148,12 @@ sub markVisited {
   my $target = shift;
   my $i = 0;
   foreach $key (%connectedActors) {
-    my %hash = map {$_ => $i++} @{$connectedActors{$key}}; # ehh, trying to make it so that each value is its position in the list...
+    my %hash = map {$_ => $i++} @{$connectedActors{$key}}; # ehh, trying to make it so that each value is its position in the list
+    foreach $checkKey ($hash) {
+      print "$checkKey : $hash{$checkKey}\n"
+    }
     if (exists $hash{$target}) {
-      splice(@{$connectedActors{$key}}, $hash{$target}, 1, $target + "#"); 
+      splice(@{$connectedActors{$key}}, $hash{$target}, 1, $target + "#"); # change this
     }
   }
 }
